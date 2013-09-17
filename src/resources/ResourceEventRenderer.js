@@ -33,8 +33,11 @@ function ResourceEventRenderer() {
 	var colContentRight = t.colContentRight;
 	var renderDaySegs = t.renderDaySegs;
 	var resizableDayEvent = t.resizableDayEvent; // TODO: streamline binding architecture
+	var getRowCnt = t.getRowCnt;
 	var getColCnt = t.getColCnt;
 	var getColWidth = t.getColWidth;
+	var getSnapHeight = t.getSnapHeight;
+	var getSnapMinutes = t.getSnapMinutes;
 	var getSlotHeight = t.getSlotHeight;
 	var getBodyContent = t.getBodyContent;
 	var reportEventElement = t.reportEventElement;
@@ -57,7 +60,8 @@ function ResourceEventRenderer() {
 		reportEvents(events);
 		var i, len=events.length,
 			dayEvents=[],
-			slotEvents=[];
+			slotEvents=[],
+			resources = calendar.getResources();
 		for (i=0; i<len; i++) {
 			if (events[i].allDay) {
 				dayEvents.push(events[i]);
@@ -66,7 +70,7 @@ function ResourceEventRenderer() {
 			}
 		}
 		if (opt('allDaySlot')) {
-			renderDaySegs(compileDaySegs(dayEvents), modifiedEventId); // PA TODO - Handle next...
+			renderDaySegs(compileDaySegs(dayEvents), modifiedEventId, true); // PA TODO - Handle next...
 			setHeight(); // no params means set to viewHeight
 		}
 		renderSlotSegs(compileSlotSegs(slotEvents), modifiedEventId);
@@ -109,7 +113,8 @@ function ResourceEventRenderer() {
 			j, level,
 			k, seg,
 			segs=[],
-			resources = calendar.getResources();
+			resources = calendar.getResources(),
+			resourceEvents, visEventEndsForRes;
 		for (i=0; i<colCnt; i++) {
 			resourceEvents = eventsForResource(resources[i], events);
 			visEventEndsForRes = visEventEndsForResource(resources[i], events);
@@ -130,12 +135,13 @@ function ResourceEventRenderer() {
 	}
 	
 	function eventsForResource(resource, events) {
-		var resEvents = [];
+		var resEvents = [],
+		    i;
 		
 		for(i=0; i<events.length; i++) {
 			if(events[i].resource) {
-				if(events[i].resource.id == resource.id) {
-					resEvents.push(events[i])
+				if(resource !== undefined && events[i].resource.id == resource.id) {
+					resEvents.push(events[i]);
 				}
 			}
 		}
@@ -144,11 +150,13 @@ function ResourceEventRenderer() {
 	}
 	
 	function visEventEndsForResource(resource, events) {
-		var resEvents = [];
+		var resEvents = [],
+		    i,
+		    visEventEnds;
 		
 		for(i=0; i<events.length; i++) {
 			if(events[i].resource) {
-				if(events[i].resource.id == resource.id) {
+				if(resource !== undefined && events[i].resource.id == resource.id) {
 					resEvents.push(events[i])
 				}
 			}
@@ -166,52 +174,6 @@ function ResourceEventRenderer() {
 		}else{
 			return addMinutes(cloneDate(event.start), opt('defaultEventMinutes'));
 		}
-	}
-	
-	// when resources have an 'all day' event 
-	
-	function renderDaySegs(segs, modifiedEventId) {
-		var segmentContainer = getDaySegmentContainer();
-		var rowDivs;
-		var rowCnt = getRowCnt();
-		var colCnt = getColCnt();
-		var i = 0;
-		var rowI;
-		var levelI;
-		var colHeights;
-		var j;
-		var segCnt = segs.length;
-		var seg;
-		var top;
-		var k;
-		segmentContainer[0].innerHTML = daySegHTML(segs); // faster than .html()
-		daySegElementResolve(segs, segmentContainer.children());
-		daySegElementReport(segs);
-		daySegHandlers(segs, segmentContainer, modifiedEventId);
-		daySegCalcHSides(segs);
-		daySegSetWidths(segs);
-		daySegCalcHeights(segs);
-		rowDivs = getRowDivs();
-		// set row heights, calculate event tops (in relation to row top)
-		for (rowI=0; rowI<rowCnt; rowI++) {
-			levelI = 0;
-			colHeights = [];
-			for (j=0; j<colCnt; j++) {
-				colHeights[j] = 0;
-			}
-			while (i<segCnt && (seg = segs[i]).row == rowI) {
-				// loop through segs in a row
-				top = arrayMax(colHeights.slice(seg.startCol, seg.endCol));
-				seg.top = top;
-				top += seg.outerHeight;
-				for (k=seg.startCol; k<seg.endCol; k++) {
-					colHeights[k] = top;
-				}
-				i++;
-			}
-			rowDivs[rowI].height(arrayMax(colHeights));
-		}
-		daySegSetTops(segs, getRowTops(rowDivs));
 	}
 	
 	// renders events in the 'time slots' at the bottom
@@ -234,7 +196,7 @@ function ResourceEventRenderer() {
 			vsideCache={},
 			hsideCache={},
 			key, val,
-			contentElement,
+			titleElement,
 			height,
 			slotSegmentContainer = getSlotSegmentContainer(),
 			rtl, dis, dit,
@@ -323,9 +285,9 @@ function ResourceEventRenderer() {
 				seg.vsides = val === undefined ? (vsideCache[key] = vsides(eventElement, true)) : val;
 				val = hsideCache[key];
 				seg.hsides = val === undefined ? (hsideCache[key] = hsides(eventElement, true)) : val;
-				contentElement = eventElement.find('div.fc-event-content');
-				if (contentElement.length) {
-					seg.contentTop = contentElement[0].offsetTop;
+				titleElement = eventElement.find('.fc-event-title');
+				if (titleElement.length) {
+					seg.contentTop = titleElement[0].offsetTop;
 				}
 			}
 		}
@@ -339,7 +301,7 @@ function ResourceEventRenderer() {
 				eventElement[0].style.height = height + 'px';
 				event = seg.event;
 				if (seg.contentTop !== undefined && height - seg.contentTop < 10) {
-					// not enough room for title, put it in the time header
+					// not enough room for title, put it in the time (TODO: maybe make both display:inline instead)
 					eventElement.find('div.fc-event-time')
 						.text(formatDate(event.start, opt('timeFormat')) + ' - ' + event.title);
 					eventElement.find('div.fc-event-title')
@@ -351,31 +313,19 @@ function ResourceEventRenderer() {
 					
 	}
 	
-	
 	function slotSegHtml(event, seg) {
 		var html = "<";
 		var url = event.url;
-		
-		var skinCss = $('');
-		if(event.resource)
-		{		
-			skinCss = getSkinCssWithResource(event, event.resource); // PA TODO - merge getSkinCssWithResource into getSkinCss
-		}
-		else
-		{
-			skinCss = getSkinCss(event, opt);
-		}
-		
-		var skinCssAttr = (skinCss ? " style='" + skinCss + "'" : '');
-		var classes = ['fc-event', 'fc-event-skin', 'fc-event-vert'];
+		var skinCss = getSkinCss(event, opt);
+		var classes = ['fc-event', 'fc-event-vert'];
 		if (isEventDraggable(event)) {
 			classes.push('fc-event-draggable');
 		}
 		if (seg.isStart) {
-			classes.push('fc-corner-top');
+			classes.push('fc-event-start');
 		}
 		if (seg.isEnd) {
-			classes.push('fc-corner-bottom');
+			classes.push('fc-event-end');
 		}
 		classes = classes.concat(event.className);
 		if (event.source) {
@@ -390,19 +340,15 @@ function ResourceEventRenderer() {
 			" class='" + classes.join(' ') + "'" +
 			" style='position:absolute;z-index:8;top:" + seg.top + "px;left:" + seg.left + "px;" + skinCss + "'" +
 			">" +
-			"<div class='fc-event-inner fc-event-skin'" + skinCssAttr + ">" +
-			"<div class='fc-event-head fc-event-skin'" + skinCssAttr + ">" +
+			"<div class='fc-event-inner'>" +
 			"<div class='fc-event-time'>" +
 			htmlEscape(formatDates(event.start, event.end, opt('timeFormat'))) +
 			"</div>" +
-			"</div>" +
-			"<div class='fc-event-content'>" +
 			"<div class='fc-event-title'>" +
 			htmlEscape(event.title) +
 			"</div>" +
 			"</div>" +
-			"<div class='fc-event-bg'></div>" +
-			"</div>"; // close inner
+			"<div class='fc-event-bg'></div>";
 		if (seg.isEnd && isEventResizable(event)) {
 			html +=
 				"<div class='ui-resizable-handle ui-resizable-s'>=</div>";
@@ -449,11 +395,13 @@ function ResourceEventRenderer() {
 		var revert;
 		var allDay=true;
 		var dayDelta;
-		var columnDelta;
+		var columnDelta,
+		    newColumn;
 		var dis = opt('isRTL') ? -1 : 1;
 		var hoverListener = getHoverListener();
 		var colWidth = getColWidth();
-		var slotHeight = getSlotHeight();
+		var snapHeight = getSnapHeight();
+		var snapMinutes = getSnapMinutes();
 		var minMinute = getMinMinute();
 		eventElement.draggable({
 			zIndex: 9,
@@ -470,12 +418,10 @@ function ResourceEventRenderer() {
 						revert = false;
 						dayDelta = 0;
 						columnDelta = colDelta;
+						newColumn = cell.col;
 						if (!cell.row) {
 							// on full-days
-							renderDayOverlay(
-								addDays(cloneDate(event.start), dayDelta),
-								addDays(exclEndDay(event), dayDelta)
-							);
+							renderResourceOverlay(newColumn);
 							resetElement();
 						}else{
 							// mouse is over bottom slots
@@ -485,10 +431,9 @@ function ResourceEventRenderer() {
 									eventElement.width(colWidth - 10); // don't use entire width
 									setOuterHeight(
 										eventElement,
-										slotHeight * Math.round(
-											(event.end ? ((event.end - event.start) / MINUTE_MS) : opt('defaultEventMinutes'))
-											/ opt('slotMinutes')
-										)
+										snapHeight * Math.round(
+											(event.end ? ((event.end - event.start) / MINUTE_MS) : opt('defaultEventMinutes')) /
+												snapMinutes										)
 									);
 									eventElement.draggable('option', 'grid', [colWidth, 1]);
 									allDay = false;
@@ -497,7 +442,7 @@ function ResourceEventRenderer() {
 								revert = true;
 							}
 						}
-						revert = revert || (allDay && !dayDelta);
+						revert = revert || (allDay && !columnDelta);
 					}else{
 						resetElement();
 						//setOverflowHidden(false);
@@ -519,11 +464,20 @@ function ResourceEventRenderer() {
 					// changed!
 					var minuteDelta = 0;
 					if (!allDay) {
-						minuteDelta = Math.round((eventElement.offset().top - getBodyContent().offset().top) / slotHeight)
-							* opt('slotMinutes')
+						minuteDelta = Math.round((eventElement.offset().top - getBodyContent().offset().top) / snapHeight)
+							* snapMinutes
 							+ minMinute
 							- (event.start.getHours() * 60 + event.start.getMinutes());
 					}
+					
+					// resource changed?
+					if (event.resource) {
+    					var newColumn = event.resource._col + columnDelta;
+    					var resources = calendar.getResources();
+					    event.resource = resources[newColumn];
+					    event.resource._col = newColumn;
+    				}
+					
 					eventDrop(this, event, dayDelta, minuteDelta, allDay, ev, ui);
 				}
 				//setOverflowHidden(false);
@@ -555,11 +509,12 @@ function ResourceEventRenderer() {
 		var hoverListener = getHoverListener();
 		var colCnt = getColCnt();
 		var colWidth = getColWidth();
-		var slotHeight = getSlotHeight();
+		var snapHeight = getSnapHeight();
+		var snapMinutes = getSnapMinutes();
 		eventElement.draggable({
 			zIndex: 9,
 			scroll: false,
-			grid: [colWidth, slotHeight],
+			grid: [colWidth, snapHeight],
 			axis: colCnt==1 ? 'y' : false,
 			opacity: opt('dragOpacity'),
 			revertDuration: opt('dragRevertDuration'),
@@ -583,15 +538,8 @@ function ResourceEventRenderer() {
 								timeElement.hide();
 								eventElement.draggable('option', 'grid', null);
 							}
-							/*
-							renderDayOverlay(
-								addDays(cloneDate(event.start), dayDelta),
-								addDays(exclEndDay(event), dayDelta)
-							);
-							*/
-							resources = calendar.getResources();
-							var arrayIndex = $.inArray(resources[newColumn], resources); // PA TODO - fix this massive hack...
-							renderResourceOverlay(arrayIndex);
+							
+							renderResourceOverlay(newColumn);
 						}else{
 							// on slots
 							resetElement();
@@ -600,7 +548,7 @@ function ResourceEventRenderer() {
 				}, ev, 'drag');
 			},
 			drag: function(ev, ui) {
-				minuteDelta = Math.round((ui.position.top - origPosition.top) / slotHeight) * opt('slotMinutes');
+				minuteDelta = Math.round((ui.position.top - origPosition.top) / snapHeight) * snapMinutes;
 				if (minuteDelta != prevMinuteDelta) {
 					if (!allDay) {
 						updateTimeText(minuteDelta);
@@ -609,13 +557,15 @@ function ResourceEventRenderer() {
 				}
 			},
 			stop: function(ev, ui) {
-				var cell = hoverListener.stop();
+				var cell = hoverListener.stop(),
+				    resources;
 				clearOverlays();
 				trigger('eventDragStop', eventElement, event, ev, ui);
 				if (cell && (columnDelta || minuteDelta || allDay)) {
 					// changed!
 					resources = calendar.getResources();
 					event.resource = resources[newColumn];
+					event.resource._col = newColumn;
 					eventDrop(this, event, dayDelta, allDay ? 0 : minuteDelta, allDay, ev, ui);
 				}else{
 					// either no change or out-of-bounds (draggable has already reverted)
@@ -639,7 +589,7 @@ function ResourceEventRenderer() {
 			// convert back to original slot-event
 			if (allDay) {
 				timeElement.css('display', ''); // show() was causing display=inline
-				eventElement.draggable('option', 'grid', [colWidth, slotHeight]);
+				eventElement.draggable('option', 'grid', [colWidth, snapHeight]);
 				allDay = false;
 			}
 		}
@@ -652,38 +602,39 @@ function ResourceEventRenderer() {
 	
 	
 	function resizableSlotEvent(event, eventElement, timeElement) {
-		var slotDelta, prevSlotDelta;
-		var slotHeight = getSlotHeight();
+		var snapDelta, prevSnapDelta;
+		var snapHeight = getSnapHeight();
+		var snapMinutes = getSnapMinutes();
 		eventElement.resizable({
 			handles: {
-				s: 'div.ui-resizable-s'
+				s: '.ui-resizable-handle'
 			},
-			grid: slotHeight,
+			grid: snapHeight,
 			start: function(ev, ui) {
-				slotDelta = prevSlotDelta = 0;
+				snapDelta = prevSnapDelta = 0;
 				hideEvents(event, eventElement);
 				eventElement.css('z-index', 9);
 				trigger('eventResizeStart', this, event, ev, ui);
 			},
 			resize: function(ev, ui) {
 				// don't rely on ui.size.height, doesn't take grid into account
-				slotDelta = Math.round((Math.max(slotHeight, eventElement.height()) - ui.originalSize.height) / slotHeight);
-				if (slotDelta != prevSlotDelta) {
+				snapDelta = Math.round((Math.max(snapHeight, eventElement.height()) - ui.originalSize.height) / snapHeight);
+				if (snapDelta != prevSnapDelta) {
 					timeElement.text(
 						formatDates(
 							event.start,
-							(!slotDelta && !event.end) ? null : // no change, so don't display time range
-								addMinutes(eventEnd(event), opt('slotMinutes')*slotDelta),
+							(!snapDelta && !event.end) ? null : // no change, so don't display time range
+								addMinutes(eventEnd(event), snapMinutes*snapDelta),
 							opt('timeFormat')
 						)
 					);
-					prevSlotDelta = slotDelta;
+					prevSnapDelta = snapDelta;
 				}
 			},
 			stop: function(ev, ui) {
 				trigger('eventResizeStop', this, event, ev, ui);
-				if (slotDelta) {
-					eventResize(this, event, 0, opt('slotMinutes')*slotDelta, ev, ui);
+				if (snapDelta) {
+					eventResize(this, event, 0, snapMinutes*snapDelta, ev, ui);
 				}else{
 					eventElement.css('z-index', 8);
 					showEvents(event, eventElement);
@@ -696,6 +647,7 @@ function ResourceEventRenderer() {
 
 }
 
+/* Duplicated, already defined in "AgendaEventRenderer.js"
 
 function countForwardSegs(levels) {
 	var i, j, k, level, segForward, segBack;
@@ -712,5 +664,4 @@ function countForwardSegs(levels) {
 		}
 	}
 }
-
-
+*/

@@ -10,7 +10,7 @@ var ajaxDefaults = {
 var eventGUID = 1;
 
 
-function EventManager(options, _sources) {
+function EventManager(options, _sources, _resources) {
 	var t = this;
 	
 	
@@ -24,6 +24,7 @@ function EventManager(options, _sources) {
 	t.removeEvents = removeEvents;
 	t.clientEvents = clientEvents;
 	t.normalizeEvent = normalizeEvent;
+	t.associateResourceWithEvent = associateResourceWithEvent;
 	
 	
 	// imports
@@ -40,7 +41,7 @@ function EventManager(options, _sources) {
 	var pendingSourceCnt = 0;
 	var loadingLevel = 0;
 	var cache = [];
-	
+	var resources = _resources;
 	
 	for (var i=0; i<_sources.length; i++) {
 		_addEventSource(_sources[i]);
@@ -74,9 +75,18 @@ function EventManager(options, _sources) {
 		_fetchEventSource(source, function(events) {
 			if (fetchID == currentFetchID) {
 				if (events) {
+
+					if (options.eventDataTransform) {
+						events = $.map(events, options.eventDataTransform);
+					}
+					if (source.eventDataTransform) {
+						events = $.map(events, source.eventDataTransform);
+					}
+					// TODO: this technique is not ideal for static array event sources.
+					//  For arrays, we'll want to process all events right in the beginning, then never again.
+				
 					for (var i=0; i<events.length; i++) {
 						events[i].source = source;
-						associateResourceWithEvent(events[i], options.resources) // resource association
 						normalizeEvent(events[i]);
 					}
 					cache = cache.concat(events);
@@ -202,7 +212,6 @@ function EventManager(options, _sources) {
 		});
 		reportEvents(cache);
 	}
-	
 	
 	
 	/* Manipulation
@@ -351,7 +360,10 @@ function EventManager(options, _sources) {
 		}else{
 			event.className = [];
 		}
+		
 		// TODO: if there is no start date, return false to indicate an invalid event
+		
+		associateResourceWithEvent(event);
 	}
 	
 	
@@ -387,21 +399,24 @@ function EventManager(options, _sources) {
 	
 	/* Resources
 	------------------------------------------------------------------------------*/
-	
-	function associateResourceWithEvent(event, resources) {
-		if(event.resourceId)
-		{
-			eventResource = new Object();
+
+	function associateResourceWithEvent(event) {
+		 var i = 0;
 		
-			$.each(
-				resources,
-				function( intIndex, resource ){
-					if(resource.id == event.resourceId) {
-						event.resource = resource;
-						delete event.resourceId;
-					}
+		if(!event.resourceId) {
+            return;
+        }
+        
+        $.each(
+            resources,
+        	function( intIndex, resource ){
+    			if(resource.id == event.resourceId) {
+					event.resource = resource;
+					event.resource._col = i;
+					delete event.resourceId;
 				}
-			);
-		}
+				i++;
+            }
+        );
 	}
 }

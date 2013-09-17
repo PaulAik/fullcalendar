@@ -1,15 +1,12 @@
-				<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-				<html>
-				<head>
-				<script type='text/javascript' src='../src/_loader.js'></script>
-				<!--[[
-				<link rel='stylesheet' type='text/css' href='../fullcalendar/fullcalendar.css' />
-				<link rel='stylesheet' type='text/css' href='../fullcalendar/fullcalendar.print.css' media='print' />
-				<script type='text/javascript' src='../jquery/jquery.js'></script>
-				<script type='text/javascript' src='../jquery/jquery-ui.js'></script>
-				<script type='text/javascript' src='../fullcalendar/fullcalendar.min.js'></script>
-				]]-->
-				<script type='text/javascript'>
+<!DOCTYPE html>
+<html>
+<head>
+<link href='../build/out/fullcalendar.css' rel='stylesheet' />
+<link href='../build/out/fullcalendar.print.css' rel='stylesheet' media='print' />
+<script src='../build/out/jquery.js'></script>
+<script src='../build/out/jquery-ui.js'></script>
+<script src='../build/out/fullcalendar.js'></script>
+<script>
 
 					$(document).ready(function() {
 					
@@ -38,11 +35,6 @@
 									color: 'blue'
 								},
 								{
-									id: 3,
-									name: 'Robert White',
-									color: 'pink'
-								},
-								{
 									id: 4,
 									name: 'Paul Green',
 									color: 'green'
@@ -57,7 +49,7 @@
 									id: 6,
 									name: 'Bob Orange',
 									color: 'orange'
-								},
+								}
 							],
 							events: [
 								{
@@ -116,6 +108,19 @@
 						
 					});
 
+					function addRes() {
+						var newResource = 	
+								{
+									id: 3,
+									name: 'Robert White',
+									color: 'pink'
+								};
+						resources = $('#calendar').fullCalendar( 'addEventResource', newResource );
+					}
+
+					function remRes() {
+						resources = $('#calendar').fullCalendar( 'removeEventResource', 3 );
+					}
 				</script>
 				<style type='text/css'>
 
@@ -134,6 +139,8 @@
 				</style>
 				</head>
 				<body>
+				<a href="javascript:void(0)" onClick="addRes();">Add resource</a>
+				<a href="javascript:void(0)" onClick="remRes();">Remove resource</a>
 				<div id='calendar'></div>
 				</body>
 				</html>

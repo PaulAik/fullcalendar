@@ -1,6 +1,6 @@
 
  
-function Calendar(element, options, eventSources) {
+function Calendar(element, options, eventSources, eventResources) {
 	var t = this;
 	
 	
@@ -29,16 +29,23 @@ function Calendar(element, options, eventSources) {
 	t.option = option;
 	t.trigger = trigger;
 	
-	t.getResources = function() { return options.resources; }
+	t.getResources = function() { return eventResources; }
+	t.setResources = function(resources) { eventResources = resources; render(false, true); }
+	t.addEventResource = addEventResource;
+	t.removeEventResource = removeEventResource;
+	t.clientResources = clientResources;
 	
 	// imports
-	EventManager.call(t, options, eventSources);
+	EventManager.call(t, options, eventSources, eventResources);
 	var isFetchNeeded = t.isFetchNeeded;
 	var fetchEvents = t.fetchEvents;
+	var associateResourceWithEvent = t.associateResourceWithEvent;
 	
 	
 	// locals
 	var _element = element[0];
+	var resourceList;
+	var resourceListElement;
 	var header;
 	var headerElement;
 	var content;
@@ -64,14 +71,14 @@ function Calendar(element, options, eventSources) {
 	setYMD(date, options.year, options.month, options.date);
 	
 	
-	function render(inc) {
+	function render(inc, rebuildSkeleton) {
 		if (!content) {
 			initialRender();
 		}else{
 			calcSize();
 			markSizesDirty();
 			markEventsDirty();
-			renderView(inc);
+			renderView(inc, rebuildSkeleton);
 		}
 	}
 	
@@ -82,6 +89,9 @@ function Calendar(element, options, eventSources) {
 		if (options.isRTL) {
 			element.addClass('fc-rtl');
 		}
+		else {
+			element.addClass('fc-ltr');
+		}
 		if (options.theme) {
 			element.addClass('ui-widget');
 		}
@@ -89,8 +99,8 @@ function Calendar(element, options, eventSources) {
 			.prependTo(element);
 			
 		// Render out the resource list before the Calendar (not applicable to all views?)
-		resourceList = new ResourceList(t, options);
-		resourceListElement = resourceList.render()
+		resourceList = new ResourceList(t, options, eventResources);
+		resourceListElement = resourceList.render();
 		if(resourceListElement) {
 			element.prepend(resourceListElement);
 		}
@@ -200,7 +210,7 @@ function Calendar(element, options, eventSources) {
 	
 	
 	
-	function renderView(inc) {
+	function renderView(inc, rebuildSkeleton) {
 		if (elementVisible()) {
 			ignoreWindowResize++; // because renderEvents might temporarily change the height before setSize is reached
 
@@ -211,9 +221,9 @@ function Calendar(element, options, eventSources) {
 			}
 			
 			var forceEventRender = false;
-			if (!currentView.start || inc || date < currentView.start || date >= currentView.end) {
+			if (!currentView.start || inc || date < currentView.start || date >= currentView.end || rebuildSkeleton) {
 				// view must render an entire new date range (and refetch/render events)
-				currentView.render(date, inc || 0); // responsible for clearing events
+				currentView.render(date, inc || 0, rebuildSkeleton); // responsible for clearing events
 				setSize(true);
 				forceEventRender = true;
 			}
@@ -368,6 +378,41 @@ function Calendar(element, options, eventSources) {
 		$.each(viewInstances, function(i, inst) {
 			inst.eventsDirty = true;
 		});
+	}
+
+		
+	function addEventResource(resource) {
+		eventResources.push(resource);
+		for(var i = 0; i < events.length; i++) {
+			associateResourceWithEvent(events[i]);
+		}
+		render(false, true);
+	}
+
+		
+	function removeEventResource(resourceId) {
+		var updatedResources = []
+		for(var i = 0; i < eventResources.length; i++) {
+			if(eventResources[i].id != resourceId) {
+				updatedResources.push(eventResources[i]);
+			}
+		}
+		eventResources = updatedResources;
+		render(false, true);
+	}
+	
+	
+	function clientResources(filter) {
+		if ($.isFunction(filter)) {
+			return $.grep(eventResources, filter);
+		}
+		else if (filter) { // an event ID
+			filter += '';
+			return $.grep(eventResources, function(e) {
+				return e.id == filter;
+			});
+		}
+		return eventResources; // else, return all
 	}
 	
 
